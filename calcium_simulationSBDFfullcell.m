@@ -390,26 +390,62 @@ ceref = 250e-3;            % mol/m3
 Ir =Iref.*(ce-cc)./ceref;
 
 % parameters for kinetics
-kaneg = 28.8;           % 1/s
-kapos = 1500e12;        % m12/(mol4.s)
-kbneg = 385.9;          % 1/s
-kbpos = 1500e9;         % m9/(mol3.s)
-kcneg = 0.1;            % 1/s
-kcpos = 1.75;           % 1/s
+ka_neg = 28.8;           % 1/s
+ka_pos = 1500e12;        % m12/(mol4.s)
+kb_neg = 385.9;          % 1/s
+kb_pos = 1500e9;         % m9/(mol3.s)
+kc_neg = 0.1;            % 1/s
+kc_pos = 1.75;           % 1/s
 
 % these are the incoming state values
 o1 = os(:,1); o2 = os(:,2); c1 = os(:,3); c2 = os(:,4); 
 
-num_steps = 1000;
-k = dt/num_steps; % this is the time step size for solving RyR ode.
+n = length(cc);
 
-% using BE, that is backward euler
-for i=1:num_steps
-    c1 = (k*kaneg.*o1 + c1)./(1+k*kapos.*cc.^4);
-    o2 = (k*kbpos.*(cc.^3).*(o1)+o2)./(1+k*kbneg);
-    c2 = (k*kcpos.*o1+c2)./(1+k*kcneg);    
-    o1 = 1-c1-o2-c2; % update o1 last, because you already have it at the beginning of the step.
-end
+% Invert matrix A
+% Elements of Matrix A
+a11 = (1+kb_neg*dt + kb_pos*cc.^3*dt);
+a12 = kb_pos*cc.^3*dt;
+a13 = kb_pos*cc.^3*dt;
+a21 = ka_neg*dt;
+a22 = (1+ka_neg*dt+ka_pos*cc.^4*dt);
+a23 = ka_neg*dt;
+a31 = kc_pos*dt;
+a32 = kc_pos*dt;
+a33 = (1+kc_pos*dt+kc_neg*dt);
+
+% minors of A
+M11 = a22.*a33 - a23.*a32;
+M12 = ones(n,1).*(a21.*a33 - a23.*a31); %because a21, a33, a23 and a31 are scalar values while others are array
+M13 = a21.*a32 - a22.*a31;  
+M21 = a12.*a33 - a13.*a32;  
+M22 = a11.*a33 - a13.*a31;  
+M23 = a11.*a32 - a12.*a31;
+M31 = a12.*a23 - a13.*a22; 
+M32 = a11.*a23 - a13.*a21;  
+M33 = a11.*a22 - a12.*a21;  
+
+%%%%%%%% Adjugate %%%%%%%%
+% M = [M11 -M21 M31;
+%      -M12 M22 -M32;
+%      M13 -M23 M33];
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+C = [-kb_pos*dt*cc.^3;  ones(length(cc),1).*(-ka_neg*dt);  ones(length(cc),1).*(-kc_pos*dt)];
+detA = M11.*a11 -M12.*a12 + M13.*a13;
+
+b = [o2;c1;c2];
+bc = b-C;
+bc1 = bc(1:n);
+bc2 = bc(n+1:2*n);
+bc3 = bc(2*n+1:3*n);
+
+o2 = (M11./detA).*(bc1) -(M21./detA).*(bc2) +(M31./detA).*(bc3);
+c1 = -(M12./detA).*(bc1) +(M22./detA).*(bc2) -(M32./detA).*(bc3);
+c2 = (M13./detA).*(bc1) -(M23./detA).*(bc2) +(M33./detA).*(bc3);
+
+o1 = 1-o2-c1-c2;
+
 o = [o1 o2 c1 c2];
 pr0 = o1 + o2;
 v = rhor.*pr0.*Ir;

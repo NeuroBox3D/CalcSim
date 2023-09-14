@@ -402,15 +402,26 @@ ceref = 250e-3;            % mol/m3
 Ir =Iref.*(ce-cc)./ceref;
 
 % parameters for kinetics
-ka_neg = 28.8;           % 1/s
-ka_pos = 1500e12;        % m12/(mol4.s)
-kb_neg = 385.9;          % 1/s
-kb_pos = 1500e9;         % m9/(mol3.s)
-kc_neg = 0.1;            % 1/s
-kc_pos = 1.75;           % 1/s
+kaneg = 28.8;           % 1/s
+kapos = 1500e12;        % m12/(mol4.s)
+kbneg = 385.9;          % 1/s
+kbpos = 1500e9;         % m9/(mol3.s)
+kcneg = 0.1;            % 1/s
+kcpos = 1.75;           % 1/s
 
 % these are the incoming state values
 o1 = os(:,1); o2 = os(:,2); c1 = os(:,3); c2 = os(:,4); 
+
+num_steps = 1000;
+k = dt/num_steps; % this is the time step size for solving RyR ode.
+
+% using BE, that is backward euler
+for i=1:num_steps
+    c1 = (k*kaneg.*o1 + c1)./(1+k*kapos.*cc.^4);
+    o2 = (k*kbpos.*(cc.^3).*(o1)+o2)./(1+k*kbneg);
+    c2 = (k*kcpos.*o1+c2)./(1+k*kcneg);    
+    o1 = 1-c1-o2-c2; % update o1 last, because you already have it at the beginning of the step.
+end
 
 n = length(cc);
 
@@ -428,7 +439,7 @@ a33 = (1+kc_pos*dt+kc_neg*dt);
 
 % minors of A
 M11 = a22.*a33 - a23.*a32;
-M12 = ones(n,1).*(a21.*a33 - a23.*a31); %because a21, a33, a23 and a31 are scalar values while others are array
+M12 = ones(n,1).*(a21.*a33 - a23.*a31);
 M13 = a21.*a32 - a22.*a31;  
 M21 = a12.*a33 - a13.*a32;  
 M22 = a11.*a33 - a13.*a31;  
